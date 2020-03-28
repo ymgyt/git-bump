@@ -1,8 +1,8 @@
 use git2::Repository;
+use git_bump::Bump;
 use std::error::Error;
 use std::io;
 use tracing::{debug, error, info, warn};
-use git_bump::Bump;
 
 fn run() -> Result<(), Box<dyn Error>> {
     let arg = git_bump::cli::parse_args();
@@ -18,7 +18,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     });
     versions.sort();
 
-    let  current = match versions.last() {
+    let current = match versions.last() {
         None => {
             info!("tags not found (pattern: {})", pattern);
             return Ok(());
@@ -43,7 +43,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let mut bumped = current.clone();
     match bump {
-       Bump::Major => bumped.increment_major() ,
+        Bump::Major => bumped.increment_major(),
         Bump::Minor => bumped.increment_minor(),
         Bump::Patch => bumped.increment_patch(),
     }
@@ -55,8 +55,8 @@ fn run() -> Result<(), Box<dyn Error>> {
         "y" | "yes" => (),
         "n" | "no" => {
             println!("canceled");
-            return Ok(())
-        },
+            return Ok(());
+        }
         unexpected => return Err(unexpected.into()),
     };
 

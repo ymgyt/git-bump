@@ -2,7 +2,7 @@ pub mod cli;
 
 use semver::{SemVerError, Version};
 use std::error::Error;
-use std::io::{ Write, BufRead};
+use std::io::{BufRead, Write};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Bump {
@@ -25,7 +25,7 @@ pub fn parse_tags(tags: git2::string_array::StringArray) -> (Vec<Version>, Vec<S
     )
 }
 
-pub fn prompt_bump<W, R>(mut r: R,mut w: W, current: &Version) -> Result<Bump, Box<dyn Error>>
+pub fn prompt_bump<W, R>(mut r: R, mut w: W, current: &Version) -> Result<Bump, Box<dyn Error>>
 where
     W: Write,
     R: BufRead,
@@ -44,13 +44,24 @@ where
             "1" => break Bump::Major,
             "2" => break Bump::Minor,
             "3" => break Bump::Patch,
-            _ => writeln!(w,"unexpect input {}", selected)?,
+            _ => writeln!(w, "unexpect input {}", selected)?,
         }
-
     };
     Ok(bump)
 }
 
 pub fn create_tag(version: &Version, repo: &mut git2::Repository) -> Result<(), Box<dyn Error>> {
+    let head = repo.head()?;
+    if !head.is_branch() {
+        return Err(Box::<dyn Error>::from("HEAD is not branch!"))
+    }
+    let obj = head.peel(git2::ObjectType::Commit)?;
+    println!("{:#?}", obj);
+
+    let signature = repo.signature()?;
+    println!("{}", signature);
+
+    let obj_id = repo.tag(&format!("v{}", version),&obj, &signature,"", false)?;
+    println!("object_id: {}", obj_id);
     Ok(())
 }
