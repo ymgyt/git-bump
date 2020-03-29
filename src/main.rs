@@ -1,10 +1,18 @@
 use git2::Repository;
 use git_bump::Bump;
 use std::error::Error;
-use std::io;
+use std::io::{self, Read as _, Write as _};
 use tracing::{debug, error, info, warn};
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<(), anyhow::Error> {
+    git_bump::Config {
+        ..Default::default()
+    }
+    .bump()
+}
+
+fn _run() -> Result<(), Box<dyn Error>> {
+    // git_bump::check_credential()?;
     let arg = git_bump::cli::parse_args();
 
     let path = arg.value_of("repo").unwrap();
@@ -60,8 +68,8 @@ fn run() -> Result<(), Box<dyn Error>> {
         unexpected => return Err(unexpected.into()),
     };
 
-    // TODO: create git tag...
     git_bump::create_tag(&bumped, &mut r)?;
+    git_bump::push_tag(&bumped, &mut r)?;
 
     Ok(())
 }

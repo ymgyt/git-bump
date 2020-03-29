@@ -1,8 +1,10 @@
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 pub fn parse_args() -> clap::ArgMatches<'static> {
     App::new("git-bump")
         .version(crate_version!())
         .about("bump git version tag")
+        .global_setting(AppSettings::ColorAuto)
+        .global_setting(AppSettings::ColoredHelp)
         .arg(
             Arg::with_name("interactive")
                 .long("interactive")
@@ -26,6 +28,7 @@ pub fn parse_args() -> clap::ArgMatches<'static> {
                 .takes_value(true)
                 .default_value("v*"),
         )
+        // TODO: Use ArgGroup
         .arg(
             Arg::with_name("major")
                 .long("major")
