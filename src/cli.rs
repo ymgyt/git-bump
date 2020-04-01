@@ -6,43 +6,28 @@ pub fn parse_args() -> clap::ArgMatches<'static> {
         .global_setting(AppSettings::ColorAuto)
         .global_setting(AppSettings::ColoredHelp)
         .arg(
-            Arg::with_name("interactive")
-                .long("interactive")
-                .short("i")
-                .help("interactive mode"),
-        )
-        .arg(
             Arg::with_name("repo")
                 .long("repo")
                 .alias("repository")
                 .short("r")
-                .help("git repository(.git) path")
-                .takes_value(true)
-                .default_value(".git"),
+                .help("git repository path")
+                .takes_value(true),
         )
         .arg(
-            Arg::with_name("pattern")
-                .long("pattern")
+            Arg::with_name("prefix")
+                .long("prefix")
+                .alias("version-prefix")
                 .short("p")
-                .help("tag filter pattern")
+                .help("version tag prefix")
                 .takes_value(true)
-                .default_value("v*"),
-        )
-        // TODO: Use ArgGroup
-        .arg(
-            Arg::with_name("major")
-                .long("major")
-                .help("bump major version"),
+                .default_value("v"),
         )
         .arg(
-            Arg::with_name("minor")
-                .long("minor")
-                .help("bump minor version"),
-        )
-        .arg(
-            Arg::with_name("patch")
-                .long("patch")
-                .help("bump patch version"),
+            Arg::with_name("verbose")
+                .long("verbose")
+                .short("v")
+                .multiple(true)
+                .help("logging verbose"),
         )
         .get_matches()
 }
