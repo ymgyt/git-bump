@@ -4,11 +4,11 @@ use anyhow::anyhow;
 use colored::*;
 use dialoguer::theme::ColorfulTheme;
 use semver::{SemVerError, Version};
-use std::io;
+use std::io::{self, Write};
 use std::result::Result as StdResult;
 
-#[allow(unused)]
-use tracing::{debug, error, trace, warn};
+use std::borrow::Cow;
+use tracing::{debug, warn};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Bump {
@@ -31,6 +31,7 @@ impl Default for Config {
         Self {
             prefix: Some("v".to_owned()),
             repository_path: None,
+            #[doc(hidden)]
             __non_exhaustive: (),
         }
     }
@@ -41,45 +42,42 @@ impl Config {
         self.build()?.bump()
     }
 
-    fn build(self) -> Result<Bumper<io::Stdout>> {
+    fn build(self) -> Result<Bumper> {
         let repo = match self.repository_path {
             Some(path) => git2::Repository::open(&path)?,
             None => git2::Repository::open_from_env()?,
         };
         Ok(Bumper {
             prefix: self.prefix,
-            w: io::stdout(),
             repo,
+            cfg: git2::Config::open_default()?,
+            w: io::stdout(),
         })
     }
 }
 
-struct Bumper<W> {
+struct Bumper {
     prefix: Option<String>,
-    w: W,
     repo: git2::Repository,
+    cfg: git2::Config,
+    w: io::Stdout,
 }
 
-impl<W> Bumper<W>
-where
-    W: io::Write,
-{
+impl Bumper {
     fn bump(mut self) -> Result<()> {
-        let pattern = if self.prefix.is_some() {
-            Some(format!("{}*", self.prefix.as_ref().unwrap()))
-        } else {
-            None
-        };
+        let pattern = self.prefix.as_deref().map(|p| format!("{}*", p));
         let tags = self.repo.tag_names(pattern.as_deref())?;
         debug!(
             "found {} tags (pattern: {})",
             tags.len(),
-            self.prefix.as_deref().unwrap_or("")
+            pattern.unwrap_or("".to_owned())
         );
 
         let (mut versions, errs) = self.parse_tags(tags);
         errs.into_iter().for_each(|e| match e {
-            semver::SemVerError::ParseError(e) => warn!("malformed semantic version: {}", e),
+            (tag, semver::SemVerError::ParseError(e)) => {
+                warn!("malformed semantic version: {} {}", tag, e)
+            }
         });
         versions.sort();
 
@@ -113,15 +111,16 @@ where
 
         self.push_tag(&bumped)
     }
+
     fn parse_tags(
         &mut self,
         tags: git2::string_array::StringArray,
-    ) -> (Vec<Version>, Vec<SemVerError>) {
+    ) -> (Vec<Version>, Vec<(String, SemVerError)>) {
         let (versions, errs): (Vec<_>, Vec<_>) = tags
             .iter()
             .flatten()
             .map(|tag| tag.trim_start_matches(self.prefix.as_deref().unwrap_or("")))
-            .map(|tag| Version::parse(tag))
+            .map(|tag| Version::parse(tag).map_err(|err| (tag.to_owned(), err)))
             .partition(StdResult::is_ok);
         (
             versions.into_iter().map(StdResult::unwrap).collect(),
@@ -187,12 +186,6 @@ where
 
     fn push_tag(&mut self, version: &Version) -> Result<()> {
         let mut origin = self.repo.find_remote("origin")?;
-        let cfg = git2::Config::open_default()?;
-        cfg.entries(None)?.flatten().for_each(|entry| {
-            if let (Some(name), Some(value)) = (entry.name(), entry.value()) {
-                trace!("{}: {}", name, value);
-            }
-        });
 
         let mut push_options = git2::PushOptions::new();
         let mut cb = git2::RemoteCallbacks::new();
@@ -216,16 +209,28 @@ where
                 url, username_from_url, allowed_types
             );
             if allowed_types.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
-                let r = git2::Cred::credential_helper(&cfg, url, username_from_url);
-                if r.is_err() {
-                    debug!("credential helper {:?}", r.as_ref().err());
-                    let cred =
-                        prompt_userpass().map_err(|_| git2::Error::from_str("prompt_userpass"))?;
-                    return git2::Cred::userpass_plaintext(&cred.0, &cred.1);
-                }
-                return r;
+                let user_name = match username_from_url {
+                    Some(u) => Some(Cow::from(u)),
+                    None => match self.user_name() {
+                        Ok(Some(u)) => Some(u),
+                        _ => None,
+                    },
+                };
+                return match git2::Cred::credential_helper(&self.cfg, url, user_name.as_deref()) {
+                    Ok(cred) => {
+                        debug!("credential helper success");
+                        Ok(cred)
+                    }
+                    Err(err) => {
+                        debug!("{}", err);
+                        // TODO: cache user credential to avoid prompt every time if user agree.
+                        let cred = prompt_userpass()
+                            .map_err(|_| git2::Error::from_str("prompt_userpass"))?;
+                        git2::Cred::userpass_plaintext(&cred.0, &cred.1)
+                    }
+                };
             }
-            // TODO: fetch username
+            // TODO: currently only USER_PASS_PLAINTEXT called :(
             git2::Cred::ssh_key_from_agent("xxx")
         });
 
@@ -238,6 +243,16 @@ where
             .push(&[&ref_spec], Some(&mut push_options))
             .map_err(anyhow::Error::from)
     }
+
+    fn user_name(&self) -> Result<Option<Cow<str>>> {
+        for entry in &self.cfg.entries(Some("user*"))? {
+            if let Ok(entry) = entry {
+                debug!("found {:?} => {:?}", entry.name(), entry.value());
+                return Ok(entry.value().map(|v| Cow::Owned(String::from(v))));
+            }
+        }
+        Ok(None)
+    }
 }
 
 fn prompt_userpass() -> Result<(String, String)> {
@@ -249,4 +264,3 @@ fn prompt_userpass() -> Result<(String, String)> {
         .interact()?;
     Ok((username, password))
 }
-
