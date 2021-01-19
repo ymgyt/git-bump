@@ -4,10 +4,9 @@ use anyhow::anyhow;
 use colored::*;
 use dialoguer::theme::ColorfulTheme;
 use semver::{SemVerError, Version};
+use std::borrow::Cow;
 use std::io::{self, Write};
 use std::result::Result as StdResult;
-
-use std::borrow::Cow;
 use tracing::{debug, warn};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -22,6 +21,7 @@ type Result<T> = std::result::Result<T, anyhow::Error>;
 pub struct Config {
     pub prefix: Option<String>,
     pub repository_path: Option<String>,
+    pub no_push: bool,
     #[doc(hidden)]
     pub __non_exhaustive: (), // https://xaeroxe.github.io/init-struct-pattern/
 }
@@ -31,7 +31,7 @@ impl Default for Config {
         Self {
             prefix: Some("v".to_owned()),
             repository_path: None,
-            #[doc(hidden)]
+            no_push: false,
             __non_exhaustive: (),
         }
     }
@@ -49,6 +49,7 @@ impl Config {
         };
         Ok(Bumper {
             prefix: self.prefix,
+            no_push: self.no_push,
             repo,
             cfg: git2::Config::open_default()?,
             w: io::stdout(),
@@ -58,6 +59,7 @@ impl Config {
 
 struct Bumper {
     prefix: Option<String>,
+    no_push: bool,
     repo: git2::Repository,
     cfg: git2::Config,
     w: io::Stdout,
@@ -109,6 +111,9 @@ impl Bumper {
         let tag_oid = self.create_tag(&bumped)?;
         debug!("create tag(object_id: {})", tag_oid);
 
+        if self.no_push {
+            return Ok(())
+        }
         self.push_tag(&bumped)
     }
 

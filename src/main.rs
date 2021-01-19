@@ -7,6 +7,7 @@ fn run() -> Result<(), anyhow::Error> {
 
     git_bump::Config {
         prefix: arg.value_of("prefix").map(ToOwned::to_owned),
+        no_push: arg.is_present("no-push"),
         repository_path: arg.value_of("repo").map(ToOwned::to_owned),
         ..Default::default()
     }

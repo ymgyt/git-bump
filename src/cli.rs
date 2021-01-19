@@ -29,5 +29,10 @@ pub fn parse_args() -> clap::ArgMatches<'static> {
                 .multiple(true)
                 .help("logging verbose"),
         )
+        .arg(
+            Arg::with_name("no-push")
+                .long("no-push")
+                .help("do not push git tag to remote")
+        )
         .get_matches()
 }
